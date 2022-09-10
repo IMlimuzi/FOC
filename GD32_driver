@@ -1,0 +1,40 @@
+//////////////
+//
+//配置GD32高级定时器
+//
+//////////////
+
+#include "gd32f4xx.h"
+
+
+
+
+/*
+**函数名：Pwm0_Init()
+**功  能：none
+**形  参：none
+**返回值：none
+*/
+static void Pwm_tiemr0_Init()
+{
+timer_oc_parameter_srtuct timer_ocintpara;
+timer_parameter_srtuct    timer_initpara;
+//时钟初始化
+rcu_periph_clock_enable(RCU_GPIOC);
+rcu_periph_clock_enable(RCU_AF);
+rcu_periph_clock_enable(RCU_TIMER0);
+
+}
+
+/*
+**函数名：Gpio_tiemr0_Init()
+**功  能：none
+**形  参：none
+**返回值：none
+*/
+static void Gpio_tiemr0_Init()
+{
+
+
+
+}
