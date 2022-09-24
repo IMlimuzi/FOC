@@ -1,3 +1,573 @@
 /////////
-//SVPWM算法
+//SVPWM算法  包含六步
 /////////
+////////////////////////////////////////////////////////////////////////////////
+
+/// SVPWM文件
+///
+///
+/// 
+/// @file    svpwm.c 
+/// @author  LH
+/// @date    2022-07-21
+/// @version v1.0 
+
+////////////////////////////////////////////////////////////////////////////////
+
+#include "driver.h"
+#include "svpwm.h"
+#include "ptz_struct.h"
+#include "rotate_plan.h"
+//#include "drv8313.h"
+#include "IQ_calculat.h"
+#include "clarke_park.h"
+#include "hall_posit.h"
+#include "IQ_calculat.h"
+#include "foc_to_pid.h"
+#include "rotate_bldc.h"
+
+///电机转动方向
+///电机正转
+#define MOTOR_DIR_FWD  0
+///电机反转
+#define MOTOR_DIR_REV  1
+/*
+********************************六步换向法***********************************/
+unsigned int timer2_pwm_duty;
+/*!
+    \brief      none pwm占空比设置
+    \param[in]  none
+    \param[out] none
+    \retval     none
+    \note       LH  @2022.07.21
+*/
+void time2_pwm_duty_change(unsigned int pwm_duty)
+{
+  timer2_pwm_duty = pwm_duty;
+}
+
+
+/********************************六步换向********************************/
+
+/*!
+    \brief      none U相进，V相出
+    \param[in]  none
+    \param[out] none
+    \retval     none
+    \note       LH  @2022.07.21
+*/
+void uh_vl()
+{
+  EN1_OFF;//U
+  EN2_ON;//V
+  EN3_OFF;//W
+  TIMER_CH0CV(TIMER0) = timer2_pwm_duty;//U199;//
+  TIMER_CH1CV(TIMER0) = 0;//V
+  TIMER_CH2CV(TIMER0) = 0;//W
+}
+
+
+/*!
+    \brief      none W相进，V相出
+    \param[in]  none
+    \param[out] none
+    \retval     none
+    \note       LH  @2022.07.21
+*/
+void wh_vl()
+{
+  EN1_OFF;//U
+  EN2_ON;//V
+  EN3_OFF;//W
+  TIMER_CH0CV(TIMER0) = 0;//U
+  TIMER_CH1CV(TIMER0) = 0;//V
+  TIMER_CH2CV(TIMER0) = timer2_pwm_duty;//W199;//
+}
+
+
+/*!
+    \brief      none W相进，U相出
+    \param[in]  none
+    \param[out] none
+    \retval     none
+    \note       LH  @2022.07.21
+*/
+void wh_ul()
+{
+  EN1_ON;//U
+  EN2_OFF;//V
+  EN3_OFF;//W
+  TIMER_CH0CV(TIMER0) = 0;//U
+  TIMER_CH1CV(TIMER0) = 0;//V
+  TIMER_CH2CV(TIMER0) = timer2_pwm_duty;//W199;//
+}
+
+
+/*!
+    \brief      none V相进，U相出
+    \param[in]  none
+    \param[out] none
+    \retval     none
+    \note       LH  @2022.07.21
+*/
+void vh_ul()
+{
+  EN1_ON;//U
+  EN2_OFF;//V
+  EN3_OFF;//W
+  TIMER_CH0CV(TIMER0) = 0;//U
+  TIMER_CH1CV(TIMER0) = timer2_pwm_duty;//V199;//
+  TIMER_CH2CV(TIMER0) = 0;//W
+}
+
+
+/*!
+    \brief      none V相进，W相出
+    \param[in]  none
+    \param[out] none
+    \retval     none
+    \note       LH  @2022.07.21
+*/
+void vh_wl()
+{
+  EN1_OFF;//U
+  EN2_OFF;//V
+  EN3_ON;//W
+  TIMER_CH0CV(TIMER0) = 0;//U
+  TIMER_CH1CV(TIMER0) = timer2_pwm_duty;//V199;//
+  TIMER_CH2CV(TIMER0) = 0;//W
+}
+
+
+/*!
+    \brief      none U相进，W相出
+    \param[in]  none
+    \param[out] none
+    \retval     none
+    \note       LH  @2022.07.21
+*/
+void uh_wl()
+{
+  EN1_OFF;//U
+  EN2_OFF;//V
+  EN3_ON;//W
+  TIMER_CH0CV(TIMER0) = timer2_pwm_duty;//U199;//
+  TIMER_CH1CV(TIMER0) = 0;//V
+  TIMER_CH2CV(TIMER0) = 0;//W
+}
+
+/*!
+    \brief      none 六步换向，对于120°hall，正转顺序为546231，反转顺序为：7-正转顺序,,（最终再减1）
+    \param[in]  none
+    \param[out] none
+    \retval     none
+    \note       LH  @2022.07.21
+*/
+pctr six_step_commu[6] =
+{
+  &uh_wl, &vh_ul, &vh_wl, &wh_vl, &uh_vl, &wh_ul
+};
+
+
+
+
+
+/*!
+    \brief      none 直流无刷六步换向
+    \param[in]  none
+    \param[out] none
+    \retval     none
+    \note       LH  @2022.07.21
+*/
+//中断里调用
+void bldc_six_step()
+{
+  if(g_ptz.hori_start_stop_set == PTZ_HORI_START)
+  {//电机处于启动状态
+    H_Hall_state.Hall_value = hall_senser_value_get();
+    if((H_Hall_state.Hall_value <= 6)&&(H_Hall_state.Hall_value >= 1))
+    {
+      if(g_ptz.hori_direction_set == PTZ_HORI_DIR_RIGHT)
+      {//电机正转- 1
+        six_step_commu[H_Hall_state.Hall_value -1]();
+      }else{//电机反转
+        six_step_commu[(7-H_Hall_state.Hall_value) -1]();
+      }
+      
+    }
+  }
+  
+//  if(g_ptz.hori_start_stop_set == PTZ_HORI_STOP && 
+//     g_ptz.hori_electric_stable.torque_switch == 1 &&
+//     g_ptz.hori_electric_stable.state == 1)
+//  {
+//    //判断初始力矩方向
+//    if(g_ptz.hori_electric_stable.reverse_torque_direction_a == PTZ_HORI_DIR_RIGHT)
+//      {//电机正转- 1
+//        six_step_commu[H_Hall_state.Hall_value -1]();
+//      }else{//电机反转
+//        six_step_commu[(7-H_Hall_state.Hall_value) -1]();
+//      }
+//  }
+  
+}
+
+
+
+
+
+////////////////////////////////////////////////////////////////////////////////
+//全桥MOS控制：上半桥PWM控制，下半桥IO电平控制。
+////////////////////////////////////////////////////////////////////////////////
+
+
+/*
+*****************************************************************************/
+
+
+
+/*
+***********************************FOC***************************************/
+
+SVPWM H_svpwm;
+SVPWM V_svpwm;
+
+int K = 296;//(sqrt(3)/24)/4096,,根号3除电压24V再乘pwm周期
+int Tpwm = 4096, Udc = 24;
+
+/*!
+    \brief      none svpwm
+    \param[in]  none
+    \param[out] none
+    \retval     none
+    \note       LH  @2022.07.26
+*/
+void  SVPWM_Contrl(SVPWM*svpwm)         //SVPWM矢量控制函数
+{
+  char N=0;
+  int32_t  T_min, T_max;
+  float min, max;
+  
+//  svpwm->Ia= svpwm->Ubeta;   // 相当于二相静止坐标--到三相静止变换出Uabc
+//  svpwm->Ib= _IQdiv2(svpwm->Ubeta) + _IQmpy(28377,svpwm->Ualpha); //0.866*32768=sqrt(3)/2*2^15
+//  svpwm->Ic= svpwm->Ib - svpwm->Ia;  
+//  
+//  svpwm->VecSector=3;   // 根据三相电压符号计算矢量扇区
+//  svpwm->VecSector=(svpwm->Ib> 0)?( svpwm->VecSector-1):svpwm->VecSector;
+//  svpwm->VecSector=(svpwm->Ic> 0)?( svpwm->VecSector-1):svpwm->VecSector;
+//  svpwm->VecSector=(svpwm->Ia< 0)?(7-svpwm->VecSector) :svpwm->VecSector;
+//  
+//  if(svpwm->VecSector==1 || svpwm->VecSector==4)  // 根据矢量扇区计算矢量占空比Tabc
+//  {  
+//    svpwm->Ta= svpwm->Ib;
+//    svpwm->Tb= svpwm->Ia-svpwm->Ic;
+//    svpwm->Tc=-svpwm->Ib;
+//  }
+//  else if(svpwm->VecSector==2 || svpwm->VecSector==5)
+//  {  
+//    svpwm->Ta= svpwm->Ic+svpwm->Ib;
+//    svpwm->Tb= svpwm->Ia;
+//    svpwm->Tc=-svpwm->Ia;
+//  }
+//  else
+//  {   
+//    svpwm->Ta= svpwm->Ic;
+//    svpwm->Tb=-svpwm->Ic;
+//    svpwm->Tc=-(svpwm->Ia+svpwm->Ib);
+//  }
+  
+  
+//  svpwm->Ia= (int)((sqrt(3) * Tpwm) / Udc * svpwm->Ubeta);
+//  svpwm->Ib= (sqrt(3) * Tpwm) / Udc * ((sqrt(3)/2.0)*svpwm->Ualpha - (1/2)*svpwm->Ubeta);
+//  svpwm->Ic= (sqrt(3) * Tpwm) / Udc * (-(sqrt(3)/2.0)*svpwm->Ualpha - (1/2)*svpwm->Ubeta);
+//  
+//  if(svpwm->Ia > 0)
+//  {
+//    N = N + 1;
+//  }
+//  
+//  if(svpwm->Ib > 0)
+//  {
+//    N = N + 2;
+//  }
+//  
+//  if(svpwm->Ic > 0)
+//  {
+//    N = N + 4;
+//  }
+  
+  
+  
+  
+  
+  
+  
+  svpwm->Ia= svpwm->Ubeta;
+  svpwm->Ib= _IQmpy(28377,svpwm->Ualpha) - _IQdiv2(svpwm->Ubeta);
+  svpwm->Ic= -(_IQmpy(28377,svpwm->Ualpha) + _IQdiv2(svpwm->Ubeta));  
+  
+  if(svpwm->Ia > 0)
+  {
+    N = N + 1;
+  }
+  
+  if(svpwm->Ib > 0)
+  {
+    N = N + 2;
+  }
+  
+  if(svpwm->Ic > 0)
+  {
+    N = N + 4;
+  }
+  
+  switch(N)
+  {
+    case 1://扇区2
+      svpwm->VecSector = 2;
+      //计算矢量电压作用时间
+      T_min = -K * svpwm->Ib;
+      T_max = -K * svpwm->Ic;
+      
+      min = (float)T_min;
+      max = (float)T_max;
+      if((T_min + T_max) > Tpwm)
+      {//防止超调
+        T_min = (int)((min / (min + max)) * 4096.0);
+        T_max = (int)((max / (min + max)) * 4096.0);
+      }
+      
+      svpwm->Ta = (Tpwm - T_min - T_max)>>2;
+      svpwm->Tb = svpwm->Ta + (T_min>>1);
+      svpwm->Tc = svpwm->Tb + (T_max>>1);
+      
+      TIMER_CH0CV(TIMER0) = H_svpwm.Tb ;//
+      TIMER_CH1CV(TIMER0) = H_svpwm.Ta ;//
+      TIMER_CH2CV(TIMER0) = H_svpwm.Tc ;//
+      break;
+      
+    case 2://扇区6
+      svpwm->VecSector = 6;
+      T_min = -K * svpwm->Ic ;
+      T_max = -K * svpwm->Ia ;
+      
+      min = (float)T_min;
+      max = (float)T_max;
+      if((T_min + T_max) > Tpwm)
+      {//防止超调
+        T_min = (int)((min / (min + max)) * 4096.0);
+        T_max = (int)((max / (min + max)) * 4096.0);
+      }
+      
+      svpwm->Ta = (Tpwm - T_min - T_max)>>2;
+      svpwm->Tb = svpwm->Ta + (T_min>>1);
+      svpwm->Tc = svpwm->Tb + (T_max>>1);
+      
+      TIMER_CH0CV(TIMER0) = H_svpwm.Ta ;//
+      TIMER_CH1CV(TIMER0) = H_svpwm.Tc ;//
+      TIMER_CH2CV(TIMER0) = H_svpwm.Tb ;//
+      break;
+      
+    case 3://扇区1
+      svpwm->VecSector = 1;
+      T_min = K * svpwm->Ib ;
+      T_max = K * svpwm->Ia ;
+      
+      min = (float)T_min;
+      max = (float)T_max;
+      if((T_min + T_max) > Tpwm)
+      {//防止超调
+        T_min = (int)((min / (min + max)) * 4096.0);
+        T_max = (int)((max / (min + max)) * 4096.0);
+      }
+      
+      svpwm->Ta = (Tpwm - T_min - T_max)>>2;
+      svpwm->Tb = svpwm->Ta + (T_min>>1);
+      svpwm->Tc = svpwm->Tb + (T_max>>1);
+      
+      TIMER_CH0CV(TIMER0) = H_svpwm.Ta ;//
+      TIMER_CH1CV(TIMER0) = H_svpwm.Tb ;//
+      TIMER_CH2CV(TIMER0) = H_svpwm.Tc ;//
+      break;
+      
+    case 4://扇区4
+      svpwm->VecSector = 4;
+      T_min = -K * svpwm->Ia;
+      T_max = -K * svpwm->Ib;
+      
+      min = (float)T_min;
+      max = (float)T_max;
+      if((T_min + T_max) > Tpwm)
+      {//防止超调
+        T_min = (int)((min / (min + max)) * 4096.0);
+        T_max = (int)((max / (min + max)) * 4096.0);
+      }
+      
+      svpwm->Ta = (Tpwm - T_min - T_max)>>2;
+      svpwm->Tb = svpwm->Ta + (T_min>>1);
+      svpwm->Tc = svpwm->Tb + (T_max>>1);
+      
+      TIMER_CH0CV(TIMER0) = H_svpwm.Tc ;//
+      TIMER_CH1CV(TIMER0) = H_svpwm.Tb ;//
+      TIMER_CH2CV(TIMER0) = H_svpwm.Ta ;//
+      break;
+      
+    case 5://扇区3
+      svpwm->VecSector = 3;
+      T_min = K * svpwm->Ia ;
+      T_max = K * svpwm->Ic ;
+      
+      min = (float)T_min;
+      max = (float)T_max;
+      if((T_min + T_max) > Tpwm)
+      {//防止超调
+        T_min = (int)((min / (min + max)) * 4096.0);
+        T_max = (int)((max / (min + max)) * 4096.0);
+      }
+      
+      svpwm->Ta = (Tpwm - T_min - T_max)>>2;
+      svpwm->Tb = svpwm->Ta + (T_min>>1);
+      svpwm->Tc = svpwm->Tb + (T_max>>1);
+      
+      TIMER_CH0CV(TIMER0) = H_svpwm.Tc ;//
+      TIMER_CH1CV(TIMER0) = H_svpwm.Ta ;//
+      TIMER_CH2CV(TIMER0) = H_svpwm.Tb ;//
+      break;
+      
+    case 6://扇区5
+      svpwm->VecSector = 5;
+      T_min = K * svpwm->Ic ;
+      T_max = K * svpwm->Ib ;
+      
+      min = (float)T_min;
+      max = (float)T_max;
+      if((T_min + T_max) > Tpwm)
+      {//防止超调
+        T_min = (int)((min / (min + max)) * 4096.0);
+        T_max = (int)((max / (min + max)) * 4096.0);
+      }
+      
+      svpwm->Ta = (Tpwm - T_min - T_max)>>2;
+      svpwm->Tb = svpwm->Ta + (T_min>>1);
+      svpwm->Tc = svpwm->Tb + (T_max>>1);
+      
+      TIMER_CH0CV(TIMER0) = H_svpwm.Tb ;//
+      TIMER_CH1CV(TIMER0) = H_svpwm.Tc ;//
+      TIMER_CH2CV(TIMER0) = H_svpwm.Ta ;//
+      break;
+      
+    default:
+      
+      break;
+      
+  }
+  
+}
+
+
+// unsigned short int PWM_DUTY[3] = {0,0,0};
+/*!
+    \brief      none H_svpwm_out
+    \param[in]  none
+    \param[out] none
+    \retval     none
+    \note       LH  @2022.07.26
+*/
+void H_svpwm_out()
+{
+ 
+  
+  TIMER_CH0CV(TIMER0) = H_svpwm.Ta ;//
+  TIMER_CH1CV(TIMER0) = H_svpwm.Tb ;//
+  TIMER_CH2CV(TIMER0) = H_svpwm.Tc ;//
+}
+
+
+
+
+int i;
+/*!
+    \brief      none FOC_Contrl
+    \param[in]  none
+    \param[out] none
+    \retval     none
+    \note       LH  @2022.07.26
+*/
+void  H_FOC_Contrl()         //FOC控制任务
+{//可单独创建任务或在定时器中断中调用
+  
+  if(g_ptz.hori_start_stop_set == PTZ_HORI_START)
+  {
+    i++;
+    if(i>=2)
+    {
+    //AD采集相电流——14位
+    UVW_Phase_current();
+    UVW_current();
+    //电机位置更新
+    irq_angle_update();
+    //正余弦转换
+    IQSin_Cos_Cale(&H_sin_cos);
+    
+    //3->2坐标变换,,(CLARKE*)
+    CLARKE_Cale(&H_clarke);
+    
+    H_park.Sine   = H_sin_cos.IQSin;
+    H_park.Cosine = H_sin_cos.IQCos;
+    
+    H_park.Alpha = H_clarke.Alpha;
+    H_park.Beta  = H_clarke.Beta;
+    //交直流变换
+    PARK_Cale(&H_park);
+    
+    H_foc_pid_id.set = 0;
+    H_foc_pid_id.fbk = H_park.Ds;
+    H_foc_pid_iq.set = 5;//g_ptz.hori_pid.PidUT_uint;
+    H_foc_pid_iq.fbk = H_park.Qs;
+    //PID计算电流环
+    pid_calculate(&H_foc_pid_id);//输出H_foc_pid_id.PidOUT_float
+    pid_calculate(&H_foc_pid_iq);//输出H_foc_pid_iq.PidOUT_float
+    
+    H_foc_pid_id.PidOUT_uint = ( int)(H_foc_pid_id.PidOUT_float);
+    H_foc_pid_iq.PidOUT_uint = ( int)(H_foc_pid_iq.PidOUT_float);
+    
+    if(g_ptz.hori_direction_set == MOTOR_DIR_FWD)
+    {//电机正转
+      H_Ipark.Ds = H_foc_pid_id.PidOUT_uint;
+      H_Ipark.Qs = H_foc_pid_iq.PidOUT_uint;//电流环
+      
+//          H_Ipark.Qs = g_ptz.hori_pid.PidUT_uint;//速度环
+    }
+    
+    if(g_ptz.hori_direction_set == MOTOR_DIR_REV)
+    {//电机反转
+      H_Ipark.Ds = -H_foc_pid_id.PidOUT_uint;
+      H_Ipark.Qs = -H_foc_pid_iq.PidOUT_uint;//电流环
+      
+//          H_Ipark.Qs = -g_ptz.hori_pid.PidUT_uint;//速度环
+    }
+    
+    H_Ipark.Sine   = H_sin_cos.IQSin;
+    H_Ipark.Cosine = H_sin_cos.IQCos;
+    //直流——交流
+    IPARK_Cale(&H_Ipark);
+    
+ 
+    H_svpwm.Ualpha = H_Ipark.Alpha;
+    H_svpwm.Ubeta = H_Ipark.Beta;
+    //计算矢量占空比
+    SVPWM_Contrl(&H_svpwm);
+    //使能pwm输出
+//    H_svpwm_out();
+    }
+  }
+}
+
+
+/*
+*****************************************************************************/
+
+
+
+
+
