@@ -1,1 +1,89 @@
 
+////////////////////////////////////////////////////////////////////////////////
+
+/// 坐标变换
+///
+///
+/// 
+/// @file    clarke_park.c 
+/// @author  LH
+/// @date    2022-07-26
+/// @version v1.0 
+
+////////////////////////////////////////////////////////////////////////////////
+
+#include "clarke_park.h"
+#include "includes.h"
+
+
+CLARKE H_clarke;
+CLARKE H_Iclarke;
+PARK H_park;
+PARK H_Ipark;
+
+/*!
+    \brief      none CLARKE
+    \param[in]  none
+    \param[out] none
+    \retval     none
+    \note       LH  @2022.07.26
+*/
+void CLARKE_Cale(CLARKE *clarke)
+{//注：AD采集数据为12位
+  clarke->Alpha = clarke->Ia;
+  clarke->Beta = (int)(((clarke->Ia + (clarke->Ib<<1))*18918)>>15);//1183/2048=0.577
+}
+
+
+/*!
+    \brief      none ICLARKE
+    \param[in]  none
+    \param[out] none
+    \retval     none
+    \note       LH  @2022.07.26
+*/
+void ICLARKE_Cale(CLARKE *Iclarke)
+{
+  Iclarke->Ia = Iclarke->Alpha;
+  Iclarke->Ib = (int)((-(Iclarke->Alpha>>1)) + ((Iclarke->Beta*28384)>>15));
+  Iclarke->Ic = -Iclarke->Ia - Iclarke->Ib;
+}
+
+
+
+/*!
+    \brief      none PARK
+    \param[in]  none
+    \param[out] none
+    \retval     none
+    \note       LH  @2022.07.26
+*/
+void PARK_Cale(PARK *park)
+{
+  park->Ds = ((park->Alpha*park->Cosine)>>15) + ((park->Beta*park->Sine)>>15);
+  park->Qs = ((park->Beta*park->Cosine)>>15) - ((park->Alpha*park->Sine)>>15);//交轴
+}
+
+
+
+/*!
+    \brief      none IPARK
+    \param[in]  none
+    \param[out] none
+    \retval     none
+    \note       LH  @2022.07.26
+*/
+void IPARK_Cale(PARK *Ipark)
+{
+  Ipark->Alpha = ((Ipark->Ds*Ipark->Cosine)>>15) - ((Ipark->Qs*Ipark->Sine)>>15);
+  Ipark->Beta = ((Ipark->Ds*Ipark->Sine)>>15) + ((Ipark->Qs*Ipark->Cosine)>>15);//交轴
+}
+
+
+
+
+
+
+
+
+
