@@ -1,1 +1,389 @@
 
+////////////////////////////////////////////////////////////////////////////////
+
+/// 霍尔反馈位置计算
+///
+///
+/// 
+/// @file    hall_posit.c 
+/// @author  LH
+/// @date    2022-07-26
+/// @version v1.0 
+
+////////////////////////////////////////////////////////////////////////////////
+
+#include "hall_posit.h"
+#include "driver.h"
+#include "IQ_calculat.h"
+#include "ptz_struct.h"
+#include "rotate_plan.h"
+
+#define SHIFT (int16_t)50 //霍尔与反电势的相位差
+#define S16_120_PHASE_SHIFT (int16_t)(65536/3)
+#define S16_60_PHASE_SHIFT  (int16_t)(65536/6)
+#define PHASE_SHIFT  (int16_t)(SHIFT*(65536/360))
+
+#define positive (char)1   //正转
+#define negative (char)-1
+
+int IQangle,j=0;//霍尔计算初始角度
+
+
+
+/*!
+    \brief      none 霍尔角度更新,定时器中断里面更新
+    \param[in]  none
+    \param[out] none
+    \retval     none
+    \note       LH  @2022.07.26
+*/
+void hall_angle_update()
+{
+  //霍尔状态捕捉
+  H_Hall_state.Hall_value = hall_senser_value_get();
+  /*
+  switch ( H_Hall_state.Hall_value )
+  {
+  case 5:
+    if ( H_Hall_state.Hall_last_value == 4 )
+    {
+      H_Hall_state.hall_dir = positive;//电机转向
+      IQangle = PHASE_SHIFT;
+    }
+    else if( H_Hall_state.Hall_last_value == 1 )
+    {
+      H_Hall_state.hall_dir = negative;
+      IQangle = ( int16_t )( PHASE_SHIFT + S16_60_PHASE_SHIFT );
+    }
+    else
+    {
+    }
+    break;
+    
+  case 1:
+    if ( H_Hall_state.Hall_last_value == 5 )
+    {
+      H_Hall_state.hall_dir = positive;
+      IQangle = PHASE_SHIFT + S16_60_PHASE_SHIFT;
+    }
+    else if ( H_Hall_state.Hall_last_value == 3 )
+    {
+      H_Hall_state.hall_dir = negative;
+      IQangle = ( int16_t )( PHASE_SHIFT + S16_120_PHASE_SHIFT );
+    }
+    else
+    {
+    }
+    break;
+    
+  case 3:
+    if ( H_Hall_state.Hall_last_value == 1 )
+    {
+      H_Hall_state.hall_dir = positive;
+      IQangle = ( int16_t )( PHASE_SHIFT + S16_120_PHASE_SHIFT );
+    }
+    else if ( H_Hall_state.Hall_last_value == 2 )
+    {
+      H_Hall_state.hall_dir = negative;
+      IQangle = ( int16_t )( PHASE_SHIFT + S16_120_PHASE_SHIFT +
+                                             S16_60_PHASE_SHIFT );
+    }
+    else
+    {
+    }
+    
+    break;
+    
+  case 2:
+    if ( H_Hall_state.Hall_last_value == 3 )
+    {
+      H_Hall_state.hall_dir = positive;
+      IQangle = ( int16_t )( PHASE_SHIFT + S16_120_PHASE_SHIFT
+                                             + S16_60_PHASE_SHIFT );
+    }
+    else if ( H_Hall_state.Hall_last_value == 6 )
+    {
+      H_Hall_state.hall_dir = negative;
+      IQangle = ( int16_t )( PHASE_SHIFT - S16_120_PHASE_SHIFT );
+    }
+    else
+    {
+    }
+    break;
+    
+  case 6:
+    if ( H_Hall_state.Hall_last_value == 2 )
+    {
+      H_Hall_state.hall_dir = positive;
+      IQangle = ( int16_t )( PHASE_SHIFT - S16_120_PHASE_SHIFT );
+    }
+    else if ( H_Hall_state.Hall_last_value == 4 )
+    {
+      H_Hall_state.hall_dir = negative;
+      IQangle = ( int16_t )( PHASE_SHIFT - S16_60_PHASE_SHIFT );
+    }
+    else
+    {
+    }
+    break;
+    
+  case 4:
+    if ( H_Hall_state.Hall_last_value == 6 )
+    {
+      H_Hall_state.hall_dir = positive;
+      IQangle = ( int16_t )( PHASE_SHIFT - S16_60_PHASE_SHIFT );
+    }
+    else if ( H_Hall_state.Hall_last_value == 5 )
+    {
+      H_Hall_state.hall_dir = negative;
+      IQangle = ( int16_t )( PHASE_SHIFT );
+    }
+    else
+    {
+    }
+    break;
+    
+  default:
+    
+    break;
+  }
+  */
+    switch ( H_Hall_state.Hall_value )
+  {
+  case 5:
+    if ( H_Hall_state.Hall_last_value == 4 )
+    {
+      H_Hall_state.hall_dir = positive;//电机转向
+      IQangle = PHASE_SHIFT;
+    }
+    else if( H_Hall_state.Hall_last_value == 1 )
+    {
+      H_Hall_state.hall_dir = negative;
+      IQangle = ( int16_t )( PHASE_SHIFT + S16_60_PHASE_SHIFT );
+    }
+    else
+    {
+    }
+    break;
+    
+  case 1:
+    if ( H_Hall_state.Hall_last_value == 5 )
+    {
+      H_Hall_state.hall_dir = positive;
+      IQangle = PHASE_SHIFT + S16_60_PHASE_SHIFT;
+    }
+    else if ( H_Hall_state.Hall_last_value == 3 )
+    {
+      H_Hall_state.hall_dir = negative;
+      IQangle = ( int16_t )( PHASE_SHIFT + S16_120_PHASE_SHIFT );
+
+    }
+    else
+    {
+    }
+    break;
+    
+  case 3:
+    if ( H_Hall_state.Hall_last_value == 1 )
+    {
+      H_Hall_state.hall_dir = positive;
+      IQangle = ( int16_t )( PHASE_SHIFT + S16_120_PHASE_SHIFT );
+
+    }
+    else if ( H_Hall_state.Hall_last_value == 2 )
+    {
+      H_Hall_state.hall_dir = negative;
+      IQangle = ( int16_t )( PHASE_SHIFT + S16_120_PHASE_SHIFT +
+                                             S16_60_PHASE_SHIFT );
+
+    }
+    else
+    {
+    }
+    
+    break;
+    
+  case 2:
+    if ( H_Hall_state.Hall_last_value == 3 )
+    {
+      H_Hall_state.hall_dir = positive;
+      IQangle = ( int16_t )( PHASE_SHIFT + S16_120_PHASE_SHIFT
+                                             + S16_60_PHASE_SHIFT );
+
+    }
+    else if ( H_Hall_state.Hall_last_value == 6 )
+    {
+      H_Hall_state.hall_dir = negative;
+      IQangle = ( int16_t )( PHASE_SHIFT + S16_120_PHASE_SHIFT*2 );
+
+    }
+    else
+    {
+    }
+    break;
+    
+  case 6:
+    if ( H_Hall_state.Hall_last_value == 2 )
+    {
+      H_Hall_state.hall_dir = positive;
+      IQangle = ( int16_t )( PHASE_SHIFT + S16_120_PHASE_SHIFT * 2 );
+
+    }
+    else if ( H_Hall_state.Hall_last_value == 4 )
+    {
+      H_Hall_state.hall_dir = negative;
+      IQangle = ( int16_t )( PHASE_SHIFT + S16_60_PHASE_SHIFT*5 );
+
+    }
+    else
+    {
+    }
+    break;
+    
+  case 4:
+    if ( H_Hall_state.Hall_last_value == 6 )
+    {
+      H_Hall_state.hall_dir = positive;
+      IQangle = ( int16_t )( PHASE_SHIFT + S16_60_PHASE_SHIFT * 5 );
+
+    }
+    else if ( H_Hall_state.Hall_last_value == 5 )
+    {
+      H_Hall_state.hall_dir = negative;
+      IQangle = ( int16_t )( PHASE_SHIFT + S16_60_PHASE_SHIFT * 6);
+
+    }
+    else
+    {
+    }
+    break;
+    
+  default:
+    
+    break;
+  }
+  if(IQangle>65536)
+  {
+    IQangle -=65536;
+  }else if(IQangle<0)
+  {
+    IQangle +=65536;
+  }
+  H_Hall_state.Hall_last_value = H_Hall_state.Hall_value;
+  
+}
+
+/*!
+    \brief      none 霍尔角度初始化
+    \param[in]  none
+    \param[out] none
+    \retval     none
+    \note       LH  @2022.07.26
+*/
+void hall_angle_init()
+{
+
+  H_Hall_state.Hall_value = hall_senser_value_get();
+  switch ( H_Hall_state.Hall_value )
+  {
+    case 5:
+      IQangle = ( int16_t )( PHASE_SHIFT + S16_60_PHASE_SHIFT / 2 );
+      break;
+    case 1:
+      IQangle = ( int16_t )( PHASE_SHIFT + S16_60_PHASE_SHIFT +
+                                              S16_60_PHASE_SHIFT / 2 );
+      break;
+    case 3:
+      IQangle = ( int16_t )( PHASE_SHIFT + S16_120_PHASE_SHIFT +
+                                              S16_60_PHASE_SHIFT / 2 );
+      break;
+    case 2:
+      IQangle = ( int16_t )( PHASE_SHIFT - S16_120_PHASE_SHIFT -
+                                              S16_60_PHASE_SHIFT / 2 );
+      break;
+    case 6:
+      IQangle = ( int16_t )( PHASE_SHIFT - S16_60_PHASE_SHIFT -
+                                              S16_60_PHASE_SHIFT / 2 );
+      break;
+    case 4:
+      IQangle = ( int16_t )( PHASE_SHIFT - S16_60_PHASE_SHIFT / 2 );
+      break;
+    default:
+      break;
+  }
+
+  H_sin_cos.IQAngle = IQangle;
+
+}
+
+
+
+/*!
+    \brief      none 速度更新角度,定时器中断里面更新
+    \param[in]  none
+    \param[out] none
+    \retval     none
+    \note       LH  @2022.07.26
+*/
+int hall_speed_angle(float hall_speed,unsigned short int time)
+{
+  float angle;
+  int Int_Angle;
+  float speed;
+  speed = ((hall_speed / 6.0) / 12500.0);
+  angle = (speed * time)*(65536/360.0);
+  Int_Angle = (int)angle;
+  return Int_Angle;
+}
+
+/*!
+    \brief      none 角度更新中断函数
+    \param[in]  none
+    \param[out] none
+    \retval     none
+    \note       LH  @2022.07.26
+*/
+void irq_angle_update()
+{
+//  j++;
+  if(g_ptz.hori_start_stop_set == PTZ_HORI_START)
+  {
+//    if(j>=12)
+//    {
+      hall_angle_update();
+      if(H_Hall_state.hall_dir == positive)
+      {//正转角度增加
+        IQangle += hall_speed_angle(g_ptz.hori_motor_speed_hall_actual,1);
+        if(IQangle>65536)
+        {
+          IQangle -=65536;
+        }else if(IQangle<0)
+        {
+          IQangle +=65536;
+        }
+      }
+      if(H_Hall_state.hall_dir == negative)
+      {//反转角度减
+        IQangle -= hall_speed_angle(g_ptz.hori_motor_speed_hall_actual,1);
+        if(IQangle>65536)
+        {
+          IQangle -=65536;
+        }else if(IQangle<0)
+        {
+          IQangle +=65536;
+        }
+      }
+      
+      H_sin_cos.IQAngle = IQangle;
+      j=0;
+//    }
+    
+  }else{
+    j=0;
+  }
+  
+}
+
+
+
+
